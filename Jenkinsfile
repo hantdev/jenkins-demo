@@ -16,6 +16,8 @@ pipeline {
   options {
     timestamps()
     ansiColor('xterm')
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+    disableConcurrentBuilds()
   }
 
   stages {
@@ -60,6 +62,7 @@ pipeline {
       post {
         always {
           junit allowEmptyResults: true, testResults: 'junit.xml'
+          archiveArtifacts artifacts: 'coverage/**', allowEmptyArchive: true
         }
       }
     }
