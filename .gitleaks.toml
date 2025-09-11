@@ -1,0 +1,13 @@
+title = "Gitleaks Config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow local test fixtures and node_modules"
+paths = [
+  ".*node_modules/.*",
+  ".*test/fixtures/.*"
+]
+
+

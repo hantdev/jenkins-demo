@@ -1,0 +1,31 @@
+{
+  "name": "jenkins-demo-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Demo Node.js app for Jenkins CI/CD with Gitleaks, SonarQube, and Nexus",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "jest --runInBand",
+    "lint": "eslint ."
+  },
+  "keywords": [
+    "jenkins",
+    "cicd",
+    "sonarqube",
+    "gitleaks",
+    "nexus"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  }
+}
+
+
