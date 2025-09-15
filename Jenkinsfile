@@ -130,7 +130,7 @@ pipeline {
       }
     }
 
-    stage('Build & Push Image') {
+    stage('Build Image') {
       steps {
         sh '''
         # Use simple tar/curl approach to build image without container runtime
@@ -179,14 +179,40 @@ pipeline {
         tar -czf ../${IMAGE_NAME}-${IMAGE_TAG}.tar.gz -C image .
         
         echo "Image built successfully: ${IMAGE_NAME}-${IMAGE_TAG}.tar.gz"
-        echo "Note: This is a simplified build without container runtime"
-        echo "For production, consider using a proper container registry with Docker/Podman"
         '''
       }
       post {
         always {
           archiveArtifacts artifacts: '*.tar.gz', allowEmptyArchive: true
         }
+      }
+    }
+
+    stage('Push to Nexus') {
+      steps {
+        sh '''
+        # Push image tarball to Nexus as raw artifact
+        # This simulates pushing to Docker registry
+        
+        # Create Nexus repository path
+        NEXUS_REPO_PATH="docker-hosted/${IMAGE_NAME}/${IMAGE_TAG}"
+        
+        # Upload image tarball to Nexus
+        curl -v \
+          -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} \
+          --upload-file ${IMAGE_NAME}-${IMAGE_TAG}.tar.gz \
+          "${REGISTRY_URL}/repository/${NEXUS_REPO_PATH}/image.tar.gz"
+        
+        # Also upload as latest
+        curl -v \
+          -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} \
+          --upload-file ${IMAGE_NAME}-${IMAGE_TAG}.tar.gz \
+          "${REGISTRY_URL}/repository/${NEXUS_REPO_PATH}/latest.tar.gz"
+        
+        echo "Image pushed to Nexus successfully:"
+        echo "  - ${REGISTRY_URL}/repository/${NEXUS_REPO_PATH}/image.tar.gz"
+        echo "  - ${REGISTRY_URL}/repository/${NEXUS_REPO_PATH}/latest.tar.gz"
+        '''
       }
     }
   }
