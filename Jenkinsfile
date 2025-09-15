@@ -102,21 +102,20 @@ pipeline {
       }
     }
 
-    stage('Build Image') {
+    stage('Build & Push Image') {
       steps {
         sh '''
-        docker build -t ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} .
-        '''
-      }
-    }
-
-    stage('Push Image') {
-      steps {
-        sh '''
-        echo ${REGISTRY_CREDS_PSW} | docker login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
-        docker push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-        docker tag ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
-        docker push ${REGISTRY_URL}/${IMAGE_NAME}:latest
+        # Use Kaniko to build and push image (no Docker daemon needed)
+        docker run --rm \
+          -v "$PWD:/workspace" \
+          -v "$HOME/.docker:/kaniko/.docker" \
+          gcr.io/kaniko-project/executor:latest \
+          --context=/workspace \
+          --dockerfile=/workspace/Dockerfile \
+          --destination=${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} \
+          --destination=${REGISTRY_URL}/${IMAGE_NAME}:latest \
+          --insecure \
+          --skip-tls-verify
         '''
       }
     }
