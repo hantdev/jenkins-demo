@@ -138,9 +138,20 @@ pipeline {
           # Download Podman binary
           PODMAN_VERSION="4.9.3"
           curl -fsSL https://github.com/containers/podman/releases/download/v${PODMAN_VERSION}/podman-remote-static-linux_amd64.tar.gz -o podman.tar.gz
+          
+          # Extract and find the actual binary name
           tar -xzf podman.tar.gz
-          chmod +x podman-remote-static
-          mv podman-remote-static podman
+          ls -la
+          
+          # Find the podman binary (could be in subdirectory)
+          PODMAN_BINARY=$(find . -name "*podman*" -type f | head -1)
+          if [ -z "$PODMAN_BINARY" ]; then
+            echo "ERROR: Could not find podman binary after extraction"
+            exit 1
+          fi
+          
+          chmod +x "$PODMAN_BINARY"
+          mv "$PODMAN_BINARY" podman
           export PATH="$PWD:$PATH"
         fi
         
