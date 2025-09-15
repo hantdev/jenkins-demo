@@ -50,8 +50,14 @@ pipeline {
     stage('Install Dev Deps') {
       steps {
         sh '''
-        # Use Docker Node.js to avoid permission issues
-        docker run --rm -v "$PWD:/app" -w /app node:20-alpine npm ci
+        # Download Node.js binary if not available
+        if ! command -v npm >/dev/null 2>&1; then
+          NODE_VERSION="20.11.0"
+          curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz -o node.tar.xz
+          tar -xf node.tar.xz
+          export PATH="$PWD/node-v${NODE_VERSION}-linux-x64/bin:$PATH"
+        fi
+        npm ci
         '''
       }
     }
@@ -59,9 +65,13 @@ pipeline {
     stage('Lint & Test') {
       steps {
         sh '''
-        # Use Docker Node.js for lint and test
-        docker run --rm -v "$PWD:/app" -w /app node:20-alpine npm run lint
-        docker run --rm -v "$PWD:/app" -w /app node:20-alpine npm test
+        # Use downloaded Node.js for lint and test
+        if ! command -v npm >/dev/null 2>&1; then
+          NODE_VERSION="20.11.0"
+          export PATH="$PWD/node-v${NODE_VERSION}-linux-x64/bin:$PATH"
+        fi
+        npm run lint
+        npm test
         '''
       }
       post {
