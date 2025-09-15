@@ -53,8 +53,8 @@ pipeline {
         # Download Node.js binary if not available
         if ! command -v npm >/dev/null 2>&1; then
           NODE_VERSION="20.11.0"
-          curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz -o node.tar.xz
-          tar -xf node.tar.xz
+          curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz -o node.tar.gz
+          tar -xzf node.tar.gz
           export PATH="$PWD/node-v${NODE_VERSION}-linux-x64/bin:$PATH"
         fi
         npm ci
