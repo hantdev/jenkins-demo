@@ -130,101 +130,40 @@ pipeline {
       }
     }
 
-    stage('Build Image') {
+    stage('Build & Push Image') {
       steps {
         sh '''
-        # Use simple tar/curl approach to build image without container runtime
-        # Create a simple build script that mimics Docker build
+        # Use Docker-in-Docker (DinD) to build and push image
+        # This approach uses a Docker container with Docker daemon inside
         
-        # Create build context
-        mkdir -p build-context
-        cp -r src package.json package-lock.json Dockerfile build-context/
+        # Start DinD container
+        docker run --rm -d \
+          --name dind \
+          --privileged \
+          -v "$PWD:/workspace" \
+          -w /workspace \
+          docker:dind
         
-        # Build the application (Node.js)
-        if ! command -v npm >/dev/null 2>&1; then
-          NODE_VERSION="20.11.0"
-          export PATH="$PWD/node-v${NODE_VERSION}-linux-x64/bin:$PATH"
-        fi
+        # Wait for Docker daemon to start
+        sleep 10
         
-        cd build-context
-        npm ci --production
+        # Build image inside DinD container
+        docker exec dind docker build -t ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} .
+        docker exec dind docker tag ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
         
-        # Create a simple image tarball (Docker format)
-        mkdir -p image/$(echo ${REGISTRY_URL}/${IMAGE_NAME} | tr '/' '_')_${IMAGE_TAG}
+        # Login to Nexus registry
+        echo ${REGISTRY_CREDS_PSW} | docker exec -i dind docker login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
         
-        # Copy application files
-        cp -r src package.json package-lock.json node_modules image/$(echo ${REGISTRY_URL}/${IMAGE_NAME} | tr '/' '_')_${IMAGE_TAG}/
+        # Push images to Nexus
+        docker exec dind docker push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+        docker exec dind docker push ${REGISTRY_URL}/${IMAGE_NAME}:latest
         
-        # Create manifest
-        cat > image/$(echo ${REGISTRY_URL}/${IMAGE_NAME} | tr '/' '_')_${IMAGE_TAG}/manifest.json << EOF
-        {
-          "schemaVersion": 2,
-          "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
-          "config": {
-            "mediaType": "application/vnd.docker.container.image.v1+json",
-            "size": 1024,
-            "digest": "sha256:$(echo ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} | sha256sum | cut -d' ' -f1)"
-          },
-          "layers": [
-            {
-              "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
-              "size": 1024,
-              "digest": "sha256:$(echo "layer1" | sha256sum | cut -d' ' -f1)"
-            }
-          ]
-        }
-        EOF
+        # Stop DinD container
+        docker stop dind
         
-        # Create image tarball
-        tar -czf ../${IMAGE_NAME}-${IMAGE_TAG}.tar.gz -C image .
-        
-        echo "Image built successfully: ${IMAGE_NAME}-${IMAGE_TAG}.tar.gz"
-        '''
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: '*.tar.gz', allowEmptyArchive: true
-        }
-      }
-    }
-
-    stage('Push to Nexus') {
-      steps {
-        sh '''
-        # Push image tarball to Nexus as raw artifact
-        # This simulates pushing to Docker registry
-        
-        # Debug: List files in current directory
-        echo "Files in current directory:"
-        ls -la
-        
-        # Find the tarball file
-        TARBALL_FILE=$(find . -name "*.tar.gz" -type f | head -1)
-        if [ -z "$TARBALL_FILE" ]; then
-          echo "ERROR: No tarball file found"
-          exit 1
-        fi
-        
-        echo "Found tarball file: $TARBALL_FILE"
-        
-        # Create Nexus repository path
-        NEXUS_REPO_PATH="docker-hosted/${IMAGE_NAME}/${IMAGE_TAG}"
-        
-        # Upload image tarball to Nexus
-        curl -v \
-          -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} \
-          --upload-file "$TARBALL_FILE" \
-          "${REGISTRY_URL}/repository/${NEXUS_REPO_PATH}/image.tar.gz"
-        
-        # Also upload as latest
-        curl -v \
-          -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} \
-          --upload-file "$TARBALL_FILE" \
-          "${REGISTRY_URL}/repository/${NEXUS_REPO_PATH}/latest.tar.gz"
-        
-        echo "Image pushed to Nexus successfully:"
-        echo "  - ${REGISTRY_URL}/repository/${NEXUS_REPO_PATH}/image.tar.gz"
-        echo "  - ${REGISTRY_URL}/repository/${NEXUS_REPO_PATH}/latest.tar.gz"
+        echo "Image built and pushed successfully:"
+        echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
+        echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:latest"
         '''
       }
     }
