@@ -90,12 +90,40 @@ pipeline {
         sh '''
         if ! command -v sonar-scanner >/dev/null 2>&1; then
           SCANNER_VERSION=5.0.1.3006
-          curl -sSLo scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux.zip
-          unzip -q scanner.zip
+          SCANNER_URL="https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux.zip"
+          
+          # Download with retry and verification
+          for i in {1..3}; do
+            echo "Download attempt $i..."
+            if curl -fsSLo scanner.zip "$SCANNER_URL"; then
+              echo "Download successful"
+              break
+            else
+              echo "Download failed, retrying..."
+              rm -f scanner.zip
+              sleep 2
+            fi
+          done
+          
+          # Verify download size (should be > 1MB)
+          if [ ! -f scanner.zip ] || [ $(stat -c%s scanner.zip) -lt 1000000 ]; then
+            echo "ERROR: Scanner download failed or file too small"
+            exit 1
+          fi
+          
+          # Extract with force overwrite
+          unzip -o scanner.zip
           export PATH="$PWD/sonar-scanner-${SCANNER_VERSION}-linux/bin:$PATH"
+          
+          # Verify installation
+          if ! sonar-scanner --version; then
+            echo "ERROR: SonarQube Scanner installation failed"
+            exit 1
+          fi
         fi
+        
         sonar-scanner \
-          -Dsonar.host.url=http://sonarqube.sonarqube.svc.cluster.local \
+          -Dsonar.host.url=http://10.10.2.200:30090 \
           -Dsonar.login=${SONAR_TOKEN} \
           -Dproject.settings=sonar-project.properties
         '''
