@@ -29,12 +29,12 @@ pipeline {
     stage('Gitleaks Scan') {
       steps {
         sh '''
-        # Use Docker Gitleaks to avoid download issues
-        docker run --rm -v "$PWD:/src" zricethezav/gitleaks:v8.28.0 detect \
-          --source /src \
-          --config /src/.gitleaks.toml \
+        curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz | tar -xz
+        ./gitleaks detect \
+          --source . \
+          --config .gitleaks.toml \
           --report-format json \
-          --report-path /src/gitleaks-report.json
+          --report-path gitleaks-report.json
         '''
       }
       post {
