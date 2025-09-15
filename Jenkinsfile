@@ -49,7 +49,14 @@ pipeline {
 
     stage('Install Dev Deps') {
       steps {
-        sh 'npm ci'
+        sh '''
+        # Install Node.js if not available
+        if ! command -v npm >/dev/null 2>&1; then
+          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+          apt-get install -y nodejs
+        fi
+        npm ci
+        '''
       }
     }
 
