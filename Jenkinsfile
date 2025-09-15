@@ -152,21 +152,21 @@ pipeline {
         # Create image tarball
         tar -czf ../${IMAGE_NAME}-${IMAGE_TAG}.tar.gz .
         
-        # Upload to Nexus as raw artifact
+        # Upload to Nexus raw repository
         curl -v \
           -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} \
           --upload-file ../${IMAGE_NAME}-${IMAGE_TAG}.tar.gz \
-          "${REGISTRY_URL}/repository/docker-hosted/${IMAGE_NAME}/${IMAGE_TAG}/image.tar.gz"
+          "${REGISTRY_URL}/repository/raw-hosted/${IMAGE_NAME}/${IMAGE_TAG}/image.tar.gz"
         
         # Also upload as latest
         curl -v \
           -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} \
           --upload-file ../${IMAGE_NAME}-${IMAGE_TAG}.tar.gz \
-          "${REGISTRY_URL}/repository/docker-hosted/${IMAGE_NAME}/latest/image.tar.gz"
+          "${REGISTRY_URL}/repository/raw-hosted/${IMAGE_NAME}/latest/image.tar.gz"
         
         echo "Image built and pushed successfully:"
-        echo "  - ${REGISTRY_URL}/repository/docker-hosted/${IMAGE_NAME}/${IMAGE_TAG}/image.tar.gz"
-        echo "  - ${REGISTRY_URL}/repository/docker-hosted/${IMAGE_NAME}/latest/image.tar.gz"
+        echo "  - ${REGISTRY_URL}/repository/raw-hosted/${IMAGE_NAME}/${IMAGE_TAG}/image.tar.gz"
+        echo "  - ${REGISTRY_URL}/repository/raw-hosted/${IMAGE_NAME}/latest/image.tar.gz"
         '''
       }
     }
