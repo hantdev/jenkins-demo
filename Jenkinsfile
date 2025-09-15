@@ -1,5 +1,26 @@
 pipeline {
-  agent any
+  agent {
+    kubernetes {
+      yaml """
+        apiVersion: v1
+        kind: Pod
+        spec:
+          containers:
+          - name: kaniko
+            image: gcr.io/kaniko-project/executor:latest
+            command:
+            - cat
+            tty: true
+            volumeMounts:
+            - name: docker-config
+              mountPath: /kaniko/.docker/
+          volumes:
+          - name: docker-config
+            secret:
+              secretName: regcred
+        """
+    }
+  }
 
   environment {
     REGISTRY_URL = credentials('nexus-registry-url')
@@ -132,39 +153,24 @@ pipeline {
 
     stage('Build & Push Image') {
       steps {
-        sh '''
-        # Use Docker-in-Docker (DinD) to build and push image
-        # This approach uses a Docker container with Docker daemon inside
-        
-        # Start DinD container
-        docker run --rm -d \
-          --name dind \
-          --privileged \
-          -v "$PWD:/workspace" \
-          -w /workspace \
-          docker:dind
-        
-        # Wait for Docker daemon to start
-        sleep 10
-        
-        # Build image inside DinD container
-        docker exec dind docker build -t ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} .
-        docker exec dind docker tag ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
-        
-        # Login to Nexus registry
-        echo ${REGISTRY_CREDS_PSW} | docker exec -i dind docker login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
-        
-        # Push images to Nexus
-        docker exec dind docker push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-        docker exec dind docker push ${REGISTRY_URL}/${IMAGE_NAME}:latest
-        
-        # Stop DinD container
-        docker stop dind
-        
-        echo "Image built and pushed successfully:"
-        echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
-        echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:latest"
-        '''
+        container('kaniko') {
+          sh '''
+            # Use Kaniko to build and push image
+            # Kaniko runs in a container with Docker config mounted
+            
+            /kaniko/executor \
+              --context $PWD \
+              --dockerfile Dockerfile \
+              --destination=${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} \
+              --destination=${REGISTRY_URL}/${IMAGE_NAME}:latest \
+              --insecure \
+              --skip-tls-verify
+            
+            echo "Image built and pushed successfully:"
+            echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:latest"
+          '''
+        }
       }
     }
   }
