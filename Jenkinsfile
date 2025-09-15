@@ -133,25 +133,27 @@ pipeline {
     stage('Build & Push Image') {
       steps {
         sh '''
-        # Download and use Buildah to build and push image (no Docker needed)
-        if ! command -v buildah >/dev/null 2>&1; then
-          # Download Buildah binary
-          BUILDAH_VERSION="1.35.0"
-          curl -fsSL https://github.com/containers/buildah/releases/download/v${BUILDAH_VERSION}/buildah-linux-amd64 -o buildah
-          chmod +x buildah
+        # Download and use Podman to build and push image (no Docker needed)
+        if ! command -v podman >/dev/null 2>&1; then
+          # Download Podman binary
+          PODMAN_VERSION="4.9.3"
+          curl -fsSL https://github.com/containers/podman/releases/download/v${PODMAN_VERSION}/podman-remote-static-linux_amd64.tar.gz -o podman.tar.gz
+          tar -xzf podman.tar.gz
+          chmod +x podman-remote-static
+          mv podman-remote-static podman
           export PATH="$PWD:$PATH"
         fi
         
-        # Build image with Buildah
-        buildah bud -t ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} -f Dockerfile .
-        buildah tag ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
+        # Build image with Podman
+        podman build -t ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} -f Dockerfile .
+        podman tag ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
         
         # Login to registry
-        echo ${REGISTRY_CREDS_PSW} | buildah login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
+        echo ${REGISTRY_CREDS_PSW} | podman login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
         
         # Push images
-        buildah push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-        buildah push ${REGISTRY_URL}/${IMAGE_NAME}:latest
+        podman push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+        podman push ${REGISTRY_URL}/${IMAGE_NAME}:latest
         '''
       }
     }
