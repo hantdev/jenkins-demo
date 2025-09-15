@@ -31,8 +31,12 @@ pipeline {
         sh '''
         set -e
         if ! command -v gitleaks >/dev/null 2>&1; then
-          curl -sSL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh | bash
+          # Download latest Gitleaks from GitHub releases
+          GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+          wget -q https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
+          tar -xzf gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
           mv gitleaks /usr/local/bin/
+          chmod +x /usr/local/bin/gitleaks
         fi
         gitleaks detect --source . --config .gitleaks.toml --report-format json --report-path gitleaks-report.json
         '''
