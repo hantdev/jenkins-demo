@@ -50,20 +50,19 @@ pipeline {
     stage('Install Dev Deps') {
       steps {
         sh '''
-        # Install Node.js if not available
-        if ! command -v npm >/dev/null 2>&1; then
-          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-          apt-get install -y nodejs
-        fi
-        npm ci
+        # Use Docker Node.js to avoid permission issues
+        docker run --rm -v "$PWD:/app" -w /app node:20-alpine npm ci
         '''
       }
     }
 
     stage('Lint & Test') {
       steps {
-        sh 'npm run lint'
-        sh 'npm test'
+        sh '''
+        # Use Docker Node.js for lint and test
+        docker run --rm -v "$PWD:/app" -w /app node:20-alpine npm run lint
+        docker run --rm -v "$PWD:/app" -w /app node:20-alpine npm test
+        '''
       }
       post {
         always {
