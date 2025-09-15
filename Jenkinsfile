@@ -152,21 +152,21 @@ pipeline {
         # Create image tarball
         tar -czf ../${IMAGE_NAME}-${IMAGE_TAG}.tar.gz .
         
-        # Upload to Nexus maven-releases repository
+        # Upload to Nexus maven-releases repository (Maven format: group/artifact/version/artifact-version.ext)
         curl -v \
           -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} \
           --upload-file ../${IMAGE_NAME}-${IMAGE_TAG}.tar.gz \
-          "${REGISTRY_URL}/repository/maven-releases/${IMAGE_NAME}/${IMAGE_TAG}/${IMAGE_NAME}-${IMAGE_TAG}.tar.gz"
+          "${REGISTRY_URL}/repository/maven-releases/com/example/${IMAGE_NAME}/${IMAGE_TAG}/${IMAGE_NAME}-${IMAGE_TAG}.tar.gz"
         
         # Also upload as latest
         curl -v \
           -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} \
           --upload-file ../${IMAGE_NAME}-${IMAGE_TAG}.tar.gz \
-          "${REGISTRY_URL}/repository/maven-releases/${IMAGE_NAME}/latest/${IMAGE_NAME}-latest.tar.gz"
+          "${REGISTRY_URL}/repository/maven-releases/com/example/${IMAGE_NAME}/latest/${IMAGE_NAME}-latest.tar.gz"
         
         echo "Image built and pushed successfully:"
-        echo "  - ${REGISTRY_URL}/repository/maven-releases/${IMAGE_NAME}/${IMAGE_TAG}/${IMAGE_NAME}-${IMAGE_TAG}.tar.gz"
-        echo "  - ${REGISTRY_URL}/repository/maven-releases/${IMAGE_NAME}/latest/${IMAGE_NAME}-latest.tar.gz"
+        echo "  - ${REGISTRY_URL}/repository/maven-releases/com/example/${IMAGE_NAME}/${IMAGE_TAG}/${IMAGE_NAME}-${IMAGE_TAG}.tar.gz"
+        echo "  - ${REGISTRY_URL}/repository/maven-releases/com/example/${IMAGE_NAME}/latest/${IMAGE_NAME}-latest.tar.gz"
         '''
       }
     }
