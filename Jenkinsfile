@@ -133,17 +133,25 @@ pipeline {
     stage('Build & Push Image') {
       steps {
         sh '''
-        # Use Kaniko to build and push image (no Docker daemon needed)
-        docker run --rm \
-          -v "$PWD:/workspace" \
-          -v "$HOME/.docker:/kaniko/.docker" \
-          gcr.io/kaniko-project/executor:latest \
-          --context=/workspace \
-          --dockerfile=/workspace/Dockerfile \
-          --destination=${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} \
-          --destination=${REGISTRY_URL}/${IMAGE_NAME}:latest \
-          --insecure \
-          --skip-tls-verify
+        # Download and use Buildah to build and push image (no Docker needed)
+        if ! command -v buildah >/dev/null 2>&1; then
+          # Download Buildah binary
+          BUILDAH_VERSION="1.35.0"
+          curl -fsSL https://github.com/containers/buildah/releases/download/v${BUILDAH_VERSION}/buildah-linux-amd64 -o buildah
+          chmod +x buildah
+          export PATH="$PWD:$PATH"
+        fi
+        
+        # Build image with Buildah
+        buildah bud -t ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} -f Dockerfile .
+        buildah tag ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
+        
+        # Login to registry
+        echo ${REGISTRY_CREDS_PSW} | buildah login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
+        
+        # Push images
+        buildah push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+        buildah push ${REGISTRY_URL}/${IMAGE_NAME}:latest
         '''
       }
     }
