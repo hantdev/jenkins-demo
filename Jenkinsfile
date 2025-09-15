@@ -33,7 +33,7 @@ pipeline {
         if ! command -v gitleaks >/dev/null 2>&1; then
           # Download latest Gitleaks from GitHub releases
           GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
-          wget -q https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
+          curl -L -o gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
           tar -xzf gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
           mv gitleaks /usr/local/bin/
           chmod +x /usr/local/bin/gitleaks
