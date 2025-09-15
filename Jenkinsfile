@@ -194,19 +194,32 @@ pipeline {
         # Push image tarball to Nexus as raw artifact
         # This simulates pushing to Docker registry
         
+        # Debug: List files in current directory
+        echo "Files in current directory:"
+        ls -la
+        
+        # Find the tarball file
+        TARBALL_FILE=$(find . -name "*.tar.gz" -type f | head -1)
+        if [ -z "$TARBALL_FILE" ]; then
+          echo "ERROR: No tarball file found"
+          exit 1
+        fi
+        
+        echo "Found tarball file: $TARBALL_FILE"
+        
         # Create Nexus repository path
         NEXUS_REPO_PATH="docker-hosted/${IMAGE_NAME}/${IMAGE_TAG}"
         
         # Upload image tarball to Nexus
         curl -v \
           -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} \
-          --upload-file ${IMAGE_NAME}-${IMAGE_TAG}.tar.gz \
+          --upload-file "$TARBALL_FILE" \
           "${REGISTRY_URL}/repository/${NEXUS_REPO_PATH}/image.tar.gz"
         
         # Also upload as latest
         curl -v \
           -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} \
-          --upload-file ${IMAGE_NAME}-${IMAGE_TAG}.tar.gz \
+          --upload-file "$TARBALL_FILE" \
           "${REGISTRY_URL}/repository/${NEXUS_REPO_PATH}/latest.tar.gz"
         
         echo "Image pushed to Nexus successfully:"
