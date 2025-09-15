@@ -15,7 +15,6 @@ pipeline {
 
   options {
     timestamps()
-    ansiColor('xterm')
     buildDiscarder(logRotator(numToKeepStr: '20'))
     disableConcurrentBuilds()
   }
@@ -72,19 +71,18 @@ pipeline {
         SONAR_SCANNER_OPTS = '-Xmx512m'
       }
       steps {
-        withSonarQubeEnv(SONARQUBE_ENV) {
-          sh '''
-          if ! command -v sonar-scanner >/dev/null 2>&1; then
-            SCANNER_VERSION=5.0.1.3006
-            curl -sSLo scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux.zip
-            unzip -q scanner.zip
-            export PATH="$PWD/sonar-scanner-${SCANNER_VERSION}-linux/bin:$PATH"
-          fi
-          sonar-scanner \
-            -Dsonar.login=${SONAR_TOKEN} \
-            -Dproject.settings=sonar-project.properties
-          '''
-        }
+        sh '''
+        if ! command -v sonar-scanner >/dev/null 2>&1; then
+          SCANNER_VERSION=5.0.1.3006
+          curl -sSLo scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux.zip
+          unzip -q scanner.zip
+          export PATH="$PWD/sonar-scanner-${SCANNER_VERSION}-linux/bin:$PATH"
+        fi
+        sonar-scanner \
+          -Dsonar.host.url=http://sonarqube.sonarqube.svc.cluster.local \
+          -Dsonar.login=${SONAR_TOKEN} \
+          -Dproject.settings=sonar-project.properties
+        '''
       }
     }
 
