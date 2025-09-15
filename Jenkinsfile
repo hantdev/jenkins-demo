@@ -29,16 +29,12 @@ pipeline {
     stage('Gitleaks Scan') {
       steps {
         sh '''
-        set -e
-        if ! command -v gitleaks >/dev/null 2>&1; then
-          # Download latest Gitleaks from GitHub releases
-          GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
-          curl -L -o gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
-          tar -xzf gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
-          mv gitleaks /usr/local/bin/
-          chmod +x /usr/local/bin/gitleaks
-        fi
-        gitleaks detect --source . --config .gitleaks.toml --report-format json --report-path gitleaks-report.json
+        # Use Docker Gitleaks to avoid download issues
+        docker run --rm -v "$PWD:/src" zricethezav/gitleaks:v8.28.0 detect \
+          --source /src \
+          --config /src/.gitleaks.toml \
+          --report-format json \
+          --report-path /src/gitleaks-report.json
         '''
       }
       post {
