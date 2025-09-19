@@ -39,6 +39,7 @@ pipeline {
             if [ ! -d .git ]; then
               echo "Initializing fresh git repository..."
               git init
+              git config --global --add safe.directory /var/jenkins_home/workspace/jenkins-demo-pipeline
               git remote add origin https://github.com/hantdev/jenkins-demo.git
             fi
             
