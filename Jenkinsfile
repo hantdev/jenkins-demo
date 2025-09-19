@@ -1,32 +1,5 @@
 pipeline {
-  agent {
-    kubernetes {
-      yaml """
-        apiVersion: v1
-        kind: Pod
-        spec:
-          containers:
-          - name: podman
-            image: quay.io/podman/stable:latest
-            command:
-            - /bin/sh
-            - -c
-            - |
-              sleep 10
-              exec cat
-            tty: true
-            securityContext:
-              runAsUser: 1000
-              runAsGroup: 1000
-            volumeMounts:
-            - name: podman-sock
-              mountPath: /run/podman
-          volumes:
-          - name: podman-sock
-            emptyDir: {}
-        """
-    }
-  }
+  agent any
 
   environment {
     REGISTRY_URL = credentials('nexus-registry-url')
@@ -159,33 +132,31 @@ pipeline {
 
     stage('Build & Push Image') {
       steps {
-        container('podman') {
-          sh '''
-          # Build container image using podman
-          echo "Building container image: ${IMAGE_NAME}:${IMAGE_TAG}"
-          podman build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-          
-          # Tag image for Nexus Docker registry
-          podman tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-          podman tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
-          
-          # Login to Nexus Docker registry
-          echo "Logging into Nexus Docker registry..."
-          echo "${REGISTRY_CREDS_PSW}" | podman login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
-          
-          # Push image to Nexus Docker registry
-          echo "Pushing image to Nexus Docker registry..."
-          podman push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-          podman push ${REGISTRY_URL}/${IMAGE_NAME}:latest
-          
-          # Logout from registry
-          podman logout ${REGISTRY_URL}
-          
-          echo "Image built and pushed successfully:"
-          echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
-          echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:latest"
-          '''
-        }
+        sh '''
+        # Build container image using docker
+        echo "Building container image: ${IMAGE_NAME}:${IMAGE_TAG}"
+        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+        
+        # Tag image for Nexus Docker registry
+        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
+        
+        # Login to Nexus Docker registry
+        echo "Logging into Nexus Docker registry..."
+        echo "${REGISTRY_CREDS_PSW}" | docker login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
+        
+        # Push image to Nexus Docker registry
+        echo "Pushing image to Nexus Docker registry..."
+        docker push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+        docker push ${REGISTRY_URL}/${IMAGE_NAME}:latest
+        
+        # Logout from registry
+        docker logout ${REGISTRY_URL}
+        
+        echo "Image built and pushed successfully:"
+        echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
+        echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:latest"
+        '''
       }
     }
   }
