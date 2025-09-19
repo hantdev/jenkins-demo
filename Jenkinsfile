@@ -17,6 +17,7 @@ pipeline {
     timestamps()
     buildDiscarder(logRotator(numToKeepStr: '20'))
     disableConcurrentBuilds()
+    skipDefaultCheckout()  // Skip automatic checkout
   }
 
   stages {
