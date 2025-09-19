@@ -161,39 +161,40 @@ pipeline {
       }
     }
 
-    stage('Build & Push Image') {
+    stage('Build & Push Image with Kaniko') {
       steps {
         sh '''
-        # Sử dụng Docker-in-Docker với docker:dind image
-        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v $PWD:/workspace -w /workspace docker:dind sh -c "
-          echo 'Installing Docker CLI in DinD container...'
-          apk add --no-cache docker-cli
-          
-          echo 'Building container image: ${IMAGE_NAME}:${IMAGE_TAG}'
-          docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-          
-          echo 'Tagging image for Nexus Docker registry'
-          docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-          docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
-          
-          echo 'Logging into Nexus Docker registry'
-          echo '${REGISTRY_CREDS_PSW}' | docker login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
-          
-          echo 'Pushing image to Nexus Docker registry'
-          docker push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-          docker push ${REGISTRY_URL}/${IMAGE_NAME}:latest
-          
-          echo 'Logging out from registry'
-          docker logout ${REGISTRY_URL}
-          
-          echo 'Image built and pushed successfully:'
-          echo '  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}'
-          echo '  - ${REGISTRY_URL}/${IMAGE_NAME}:latest'
-        "
+        # Sử dụng Kaniko để build và push image
+        echo "Building and pushing image with Kaniko..."
+        
+        # Tạo Docker config cho authentication
+        mkdir -p /tmp/.docker
+        cat > /tmp/.docker/config.json << EOF
+        {
+          "auths": {
+            "${REGISTRY_URL}": {
+              "auth": "$(echo -n "${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW}" | base64)"
+            }
+          }
+        }
+        EOF
+        
+        # Chạy Kaniko để build và push image
+        docker run --rm \
+          -v $PWD:/workspace \
+          -v /tmp/.docker:/kaniko/.docker:ro \
+          gcr.io/kaniko-project/executor:latest \
+          --context=/workspace \
+          --dockerfile=/workspace/Dockerfile \
+          --destination=${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} \
+          --destination=${REGISTRY_URL}/${IMAGE_NAME}:latest \
+          --cache=true
+        
+        echo "Image built and pushed successfully with Kaniko:"
+        echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
+        echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:latest"
         '''
       }
     }
   }
 }
-
-
