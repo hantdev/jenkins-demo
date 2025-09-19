@@ -1,5 +1,26 @@
 pipeline {
-  agent any
+  agent {
+    kubernetes {
+      yaml """
+        apiVersion: v1
+        kind: Pod
+        spec:
+          containers:
+          - name: kaniko
+            image: gcr.io/kaniko-project/executor:latest
+            command:
+            - /busybox/cat
+            tty: true
+            volumeMounts:
+            - name: kaniko-secret
+              mountPath: /kaniko/.docker
+          volumes:
+          - name: kaniko-secret
+            secret:
+              secretName: kaniko-secret
+        """
+    }
+  }
 
   environment {
     REGISTRY_URL = credentials('nexus-registry-url')
@@ -133,32 +154,19 @@ pipeline {
     stage('Build & Push Image') {
       steps {
         sh '''
-        # Install podman if not available
-        if ! command -v podman >/dev/null 2>&1; then
-          echo "Installing podman..."
-          sudo apt-get update
-          sudo apt-get install -y podman
-        fi
+        # Create Docker config for Kaniko
+        mkdir -p /kaniko/.docker
+        echo "{\"auths\":{\"${REGISTRY_URL}\":{\"auth\":\"$(echo -n ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} | base64)\"}}}" > /kaniko/.docker/config.json
         
-        # Build container image using podman
-        echo "Building container image: ${IMAGE_NAME}:${IMAGE_TAG}"
-        podman build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-        
-        # Tag image for Nexus Docker registry
-        podman tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-        podman tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
-        
-        # Login to Nexus Docker registry
-        echo "Logging into Nexus Docker registry..."
-        echo "${REGISTRY_CREDS_PSW}" | podman login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
-        
-        # Push image to Nexus Docker registry
-        echo "Pushing image to Nexus Docker registry..."
-        podman push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-        podman push ${REGISTRY_URL}/${IMAGE_NAME}:latest
-        
-        # Logout from registry
-        podman logout ${REGISTRY_URL}
+        # Build and push image using Kaniko
+        echo "Building and pushing Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
+        /kaniko/executor \
+          --context=. \
+          --dockerfile=Dockerfile \
+          --destination=${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} \
+          --destination=${REGISTRY_URL}/${IMAGE_NAME}:latest \
+          --cache=true \
+          --cache-ttl=24h
         
         echo "Image built and pushed successfully:"
         echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
