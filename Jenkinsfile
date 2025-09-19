@@ -133,40 +133,29 @@ pipeline {
     stage('Build & Push Image') {
       steps {
         sh '''
-        # Use simple approach: create image tarball and upload to Nexus
-        # This avoids Docker daemon requirements
+        # Build Docker image
+        echo "Building Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
+        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
         
-        # Create build context
-        mkdir -p build-context
-        cp -r src package.json package-lock.json Dockerfile build-context/
+        # Tag image for Nexus Docker registry
+        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
         
-        # Build the application (Node.js)
-        if ! command -v npm >/dev/null 2>&1; then
-          NODE_VERSION="20.11.0"
-          export PATH="$PWD/node-v${NODE_VERSION}-linux-x64/bin:$PATH"
-        fi
+        # Login to Nexus Docker registry
+        echo "Logging into Nexus Docker registry..."
+        echo "${REGISTRY_CREDS_PSW}" | docker login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
         
-        cd build-context
-        npm ci --production
+        # Push image to Nexus Docker registry
+        echo "Pushing image to Nexus Docker registry..."
+        docker push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+        docker push ${REGISTRY_URL}/${IMAGE_NAME}:latest
         
-        # Create image tarball
-        tar -czf ../${IMAGE_NAME}-${IMAGE_TAG}.tar.gz .
-        
-        # Upload to Nexus maven-releases repository (Maven format: group/artifact/version/artifact-version.ext)
-        curl -v \
-          -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} \
-          --upload-file ../${IMAGE_NAME}-${IMAGE_TAG}.tar.gz \
-          "${REGISTRY_URL}/repository/maven-releases/com/example/${IMAGE_NAME}/${IMAGE_TAG}/${IMAGE_NAME}-${IMAGE_TAG}.tar.gz"
-        
-        # Also upload as latest
-        curl -v \
-          -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} \
-          --upload-file ../${IMAGE_NAME}-${IMAGE_TAG}.tar.gz \
-          "${REGISTRY_URL}/repository/maven-releases/com/example/${IMAGE_NAME}/latest/${IMAGE_NAME}-latest.tar.gz"
+        # Logout from registry
+        docker logout ${REGISTRY_URL}
         
         echo "Image built and pushed successfully:"
-        echo "  - ${REGISTRY_URL}/repository/maven-releases/com/example/${IMAGE_NAME}/${IMAGE_TAG}/${IMAGE_NAME}-${IMAGE_TAG}.tar.gz"
-        echo "  - ${REGISTRY_URL}/repository/maven-releases/com/example/${IMAGE_NAME}/latest/${IMAGE_NAME}-latest.tar.gz"
+        echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
+        echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:latest"
         '''
       }
     }
