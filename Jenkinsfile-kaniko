@@ -166,9 +166,13 @@ pipeline {
         sh '''
         # Sử dụng Kaniko để build và push image
         echo "Building and pushing image with Kaniko..."
+        echo "Registry URL: ${REGISTRY_URL}"
+        echo "Image Name: ${IMAGE_NAME}"
+        echo "Image Tag: ${IMAGE_TAG}"
         
         # Tạo Docker config cho authentication
         mkdir -p /tmp/.docker
+        echo "Creating Docker config for authentication..."
         cat > /tmp/.docker/config.json << EOF
         {
           "auths": {
@@ -179,7 +183,11 @@ pipeline {
         }
         EOF
         
+        echo "Docker config created:"
+        cat /tmp/.docker/config.json
+        
         # Chạy Kaniko để build và push image
+        echo "Starting Kaniko build..."
         docker run --rm \
           -v $PWD:/workspace \
           -v /tmp/.docker:/kaniko/.docker:ro \
@@ -188,8 +196,10 @@ pipeline {
           --dockerfile=/workspace/Dockerfile \
           --destination=${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} \
           --destination=${REGISTRY_URL}/${IMAGE_NAME}:latest \
-          --cache=true
+          --cache=true \
+          --verbosity=debug
         
+        echo "Kaniko build completed!"
         echo "Image built and pushed successfully with Kaniko:"
         echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
         echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:latest"
