@@ -7,7 +7,7 @@ pipeline {
         spec:
           containers:
           - name: docker
-            image: docker:latest
+            image: docker:20.10-dind
             command:
             - /bin/sh
             - -c
