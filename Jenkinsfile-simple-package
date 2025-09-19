@@ -1,0 +1,140 @@
+pipeline {
+  agent any
+
+  environment {
+    REGISTRY_URL = credentials('nexus-registry-url')
+    REGISTRY_CREDS = credentials('nexus-docker-creds')
+    IMAGE_NAME = 'jenkins-demo-app'
+    IMAGE_TAG = "${env.BUILD_NUMBER}"
+  }
+
+  options {
+    timestamps()
+    buildDiscarder(logRotator(numToKeepStr: '5'))
+    skipDefaultCheckout()
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        script {
+          sh '''
+            echo "=== CHECKOUT STAGE ==="
+            echo "Current directory: $(pwd)"
+            
+            # Clean and initialize git repository
+            if [ -d .git ] && ! git status >/dev/null 2>&1; then
+              echo "Removing corrupted git repository..."
+              rm -rf .git
+            fi
+            
+            if [ ! -d .git ]; then
+              echo "Initializing git repository..."
+              git init
+              git config --global --add safe.directory /var/jenkins_home/workspace/jenkins-demo-pipeline
+              git remote add origin https://github.com/hantdev/jenkins-demo.git
+            fi
+            
+            echo "Fetching and checking out code..."
+            git fetch origin main
+            git checkout -f main
+            git reset --hard origin/main
+            
+            echo "Git status:"
+            git status
+            echo "Files in workspace:"
+            ls -la
+          '''
+        }
+      }
+    }
+
+    stage('Install Dev Deps') {
+      steps {
+        sh '''
+          echo "=== INSTALL DEV DEPS ==="
+          # Download Node.js binary if not available
+          if ! command -v npm >/dev/null 2>&1; then
+            NODE_VERSION="20.11.0"
+            curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz -o node.tar.gz
+            tar -xzf node.tar.gz
+            export PATH="$PWD/node-v${NODE_VERSION}-linux-x64/bin:$PATH"
+          fi
+          npm ci
+        '''
+      }
+    }
+
+    stage('Lint & Test') {
+      steps {
+        sh '''
+          echo "=== LINT & TEST ==="
+          # Use downloaded Node.js for lint and test
+          if ! command -v npm >/dev/null 2>&1; then
+            NODE_VERSION="20.11.0"
+            export PATH="$PWD/node-v${NODE_VERSION}-linux-x64/bin:$PATH"
+          fi
+          npm run lint
+          npm test
+        '''
+      }
+      post {
+        always {
+          junit allowEmptyResults: true, testResults: 'junit.xml'
+          archiveArtifacts artifacts: 'coverage/**', allowEmptyArchive: true
+        }
+      }
+    }
+
+    stage('Create Application Package') {
+      steps {
+        sh '''
+          echo "=== CREATE APPLICATION PACKAGE ==="
+          echo "Registry URL: ${REGISTRY_URL}"
+          echo "Image Name: ${IMAGE_NAME}"
+          echo "Image Tag: ${IMAGE_TAG}"
+          
+          # Create application package
+          echo "Creating application package..."
+          tar -czf ${IMAGE_NAME}-${IMAGE_TAG}.tar.gz \
+            --exclude='node_modules' \
+            --exclude='.git' \
+            --exclude='*.tar.gz' \
+            --exclude='*.zip' \
+            .
+          
+          echo "Package created successfully!"
+          echo "Package size: $(stat -c%s ${IMAGE_NAME}-${IMAGE_TAG}.tar.gz) bytes"
+          
+          # Create package info
+          cat > package-info.txt << EOF
+Application Package Information
+=============================
+Name: ${IMAGE_NAME}
+Version: ${IMAGE_TAG}
+Registry: ${REGISTRY_URL}
+Created: $(date)
+Size: $(stat -c%s ${IMAGE_NAME}-${IMAGE_TAG}.tar.gz) bytes
+Contents:
+$(tar -tzf ${IMAGE_NAME}-${IMAGE_TAG}.tar.gz | head -20)
+EOF
+          
+          echo "Package info created:"
+          cat package-info.txt
+          
+          echo "=== APPLICATION PACKAGE CREATED SUCCESSFULLY ==="
+          echo "Package: ${IMAGE_NAME}-${IMAGE_TAG}.tar.gz"
+          echo "Info: package-info.txt"
+          echo "Note: This is a working CI/CD pipeline without Docker daemon"
+          echo "=== END OF PIPELINE ==="
+        '''
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: '*.tar.gz', allowEmptyArchive: true
+          archiveArtifacts artifacts: 'package-info.txt', allowEmptyArchive: true
+        }
+      }
+    }
+  }
+}
