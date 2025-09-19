@@ -6,18 +6,36 @@ pipeline {
         kind: Pod
         spec:
           containers:
-          - name: kaniko
-            image: gcr.io/kaniko-project/executor:latest
+          - name: docker
+            image: docker:latest
             command:
-            - /busybox/cat
+            - /bin/sh
+            - -c
+            - |
+              dockerd-entrypoint.sh &
+              sleep 10
+              exec cat
+            tty: true
+            securityContext:
+              privileged: true
+            volumeMounts:
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+          - name: docker-client
+            image: docker:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              sleep 20
+              exec cat
             tty: true
             volumeMounts:
-            - name: kaniko-secret
-              mountPath: /kaniko/.docker
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
           volumes:
-          - name: kaniko-secret
-            secret:
-              secretName: kaniko-secret
+          - name: docker-sock
+            emptyDir: {}
         """
     }
   }
@@ -153,25 +171,37 @@ pipeline {
 
     stage('Build & Push Image') {
       steps {
-        sh '''
-        # Create Docker config for Kaniko
-        mkdir -p /kaniko/.docker
-        echo "{\"auths\":{\"${REGISTRY_URL}\":{\"auth\":\"$(echo -n ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} | base64)\"}}}" > /kaniko/.docker/config.json
-        
-        # Build and push image using Kaniko
-        echo "Building and pushing Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
-        /kaniko/executor \
-          --context=. \
-          --dockerfile=Dockerfile \
-          --destination=${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} \
-          --destination=${REGISTRY_URL}/${IMAGE_NAME}:latest \
-          --cache=true \
-          --cache-ttl=24h
-        
-        echo "Image built and pushed successfully:"
-        echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
-        echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:latest"
-        '''
+        container('docker-client') {
+          sh '''
+          # Wait for Docker daemon to be ready
+          echo "Waiting for Docker daemon..."
+          timeout 60 sh -c 'until docker info; do sleep 1; done'
+          
+          # Build Docker image
+          echo "Building Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
+          docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+          
+          # Tag image for Nexus Docker registry
+          docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+          docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
+          
+          # Login to Nexus Docker registry
+          echo "Logging into Nexus Docker registry..."
+          echo "${REGISTRY_CREDS_PSW}" | docker login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
+          
+          # Push image to Nexus Docker registry
+          echo "Pushing image to Nexus Docker registry..."
+          docker push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+          docker push ${REGISTRY_URL}/${IMAGE_NAME}:latest
+          
+          # Logout from registry
+          docker logout ${REGISTRY_URL}
+          
+          echo "Image built and pushed successfully:"
+          echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
+          echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:latest"
+          '''
+        }
       }
     }
   }
