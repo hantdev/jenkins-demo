@@ -1,0 +1,104 @@
+pipeline {
+  agent any
+
+  environment {
+    REGISTRY_URL = credentials('nexus-registry-url')
+    REGISTRY_CREDS = credentials('nexus-docker-creds')
+    IMAGE_NAME = 'jenkins-demo-app'
+    IMAGE_TAG = "${env.BUILD_NUMBER}"
+  }
+
+  options {
+    timestamps()
+    buildDiscarder(logRotator(numToKeepStr: '5'))
+    skipDefaultCheckout()
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        script {
+          sh '''
+            echo "=== CHECKOUT STAGE ==="
+            echo "Current directory: $(pwd)"
+            
+            # Clean and initialize git repository
+            if [ -d .git ] && ! git status >/dev/null 2>&1; then
+              echo "Removing corrupted git repository..."
+              rm -rf .git
+            fi
+            
+            if [ ! -d .git ]; then
+              echo "Initializing git repository..."
+              git init
+              git config --global --add safe.directory /var/jenkins_home/workspace/jenkins-demo-pipeline
+              git remote add origin https://github.com/hantdev/jenkins-demo.git
+            fi
+            
+            echo "Fetching and checking out code..."
+            git fetch origin main
+            git checkout -f main
+            git reset --hard origin/main
+            
+            echo "Git status:"
+            git status
+            echo "Files in workspace:"
+            ls -la
+          '''
+        }
+      }
+    }
+
+    stage('Build & Push with Kaniko') {
+      steps {
+        sh '''
+          echo "=== KANIKO BUILD STAGE ==="
+          echo "Registry URL: ${REGISTRY_URL}"
+          echo "Image Name: ${IMAGE_NAME}"
+          echo "Image Tag: ${IMAGE_TAG}"
+          
+          # Create Docker config for authentication
+          echo "Creating Docker authentication config..."
+          mkdir -p /tmp/.docker
+          
+          # Create config.json with proper authentication
+          cat > /tmp/.docker/config.json << EOF
+{
+  "auths": {
+    "${REGISTRY_URL}": {
+      "auth": "$(echo -n "${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW}" | base64)"
+    }
+  }
+}
+EOF
+          
+          echo "Docker config created successfully"
+          echo "Config content:"
+          cat /tmp/.docker/config.json
+          
+          # Test registry connectivity
+          echo "Testing registry connectivity..."
+          curl -I ${REGISTRY_URL}/v2/ || echo "Registry connectivity test completed"
+          
+          # Build and push with Kaniko
+          echo "Starting Kaniko build and push..."
+          docker run --rm \
+            -v $PWD:/workspace \
+            -v /tmp/.docker:/kaniko/.docker:ro \
+            gcr.io/kaniko-project/executor:latest \
+            --context=/workspace \
+            --dockerfile=/workspace/Dockerfile \
+            --destination=${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} \
+            --destination=${REGISTRY_URL}/${IMAGE_NAME}:latest \
+            --verbosity=debug
+          
+          echo "=== BUILD COMPLETED SUCCESSFULLY ==="
+          echo "Images pushed to registry:"
+          echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
+          echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:latest"
+          echo "=== END OF PIPELINE ==="
+        '''
+      }
+    }
+  }
+}
