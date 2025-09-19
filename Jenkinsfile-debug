@@ -57,6 +57,9 @@ EOF
           cat Dockerfile
           
           echo "Testing Kaniko build (no push)..."
+          echo "Installing Docker CLI first..."
+          apk add --no-cache docker-cli || echo "Failed to install docker-cli"
+          
           docker run --rm \
             -v $PWD:/workspace \
             gcr.io/kaniko-project/executor:latest \
