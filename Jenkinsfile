@@ -22,7 +22,36 @@ pipeline {
   stages {
     stage('Checkout') {
       steps {
-        checkout scm
+        script {
+          // Đảm bảo workspace là git repository và có thể fetch
+          sh '''
+            echo "Current directory: $(pwd)"
+            echo "Contents: $(ls -la)"
+            
+            # Xóa workspace cũ nếu có vấn đề
+            if [ -d .git ] && ! git status >/dev/null 2>&1; then
+              echo "Corrupted git repository detected, removing..."
+              rm -rf .git
+            fi
+            
+            # Khởi tạo git repository nếu cần
+            if [ ! -d .git ]; then
+              echo "Initializing fresh git repository..."
+              git init
+              git remote add origin https://github.com/hantdev/jenkins-demo.git
+            fi
+            
+            # Fetch và checkout code
+            echo "Fetching from remote repository..."
+            git fetch origin main
+            git checkout -f main
+            git reset --hard origin/main
+            
+            echo "Git status after checkout:"
+            git status
+            echo "Current branch: $(git branch --show-current)"
+          '''
+        }
       }
     }
 
