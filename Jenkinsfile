@@ -1,10 +1,5 @@
 pipeline {
-  agent {
-    docker {
-      image 'docker:latest'
-      args '-v /var/run/docker.sock:/var/run/docker.sock'
-    }
-  }
+  agent any
 
   environment {
     REGISTRY_URL = credentials('nexus-registry-url')
@@ -138,25 +133,32 @@ pipeline {
     stage('Build & Push Image') {
       steps {
         sh '''
-        # Build Docker image
-        echo "Building Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
-        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+        # Install podman if not available
+        if ! command -v podman >/dev/null 2>&1; then
+          echo "Installing podman..."
+          sudo apt-get update
+          sudo apt-get install -y podman
+        fi
+        
+        # Build container image using podman
+        echo "Building container image: ${IMAGE_NAME}:${IMAGE_TAG}"
+        podman build -t ${IMAGE_NAME}:${IMAGE_TAG} .
         
         # Tag image for Nexus Docker registry
-        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
+        podman tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+        podman tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
         
         # Login to Nexus Docker registry
         echo "Logging into Nexus Docker registry..."
-        echo "${REGISTRY_CREDS_PSW}" | docker login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
+        echo "${REGISTRY_CREDS_PSW}" | podman login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
         
         # Push image to Nexus Docker registry
         echo "Pushing image to Nexus Docker registry..."
-        docker push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-        docker push ${REGISTRY_URL}/${IMAGE_NAME}:latest
+        podman push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+        podman push ${REGISTRY_URL}/${IMAGE_NAME}:latest
         
         # Logout from registry
-        docker logout ${REGISTRY_URL}
+        podman logout ${REGISTRY_URL}
         
         echo "Image built and pushed successfully:"
         echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
