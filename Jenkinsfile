@@ -6,35 +6,23 @@ pipeline {
         kind: Pod
         spec:
           containers:
-          - name: docker
-            image: docker:latest
+          - name: podman
+            image: quay.io/podman/stable:latest
             command:
             - /bin/sh
             - -c
             - |
-              dockerd-entrypoint.sh &
               sleep 10
               exec cat
             tty: true
             securityContext:
-              privileged: true
+              runAsUser: 1000
+              runAsGroup: 1000
             volumeMounts:
-            - name: docker-sock
-              mountPath: /var/run/docker.sock
-          - name: docker-client
-            image: docker:latest
-            command:
-            - /bin/sh
-            - -c
-            - |
-              sleep 20
-              exec cat
-            tty: true
-            volumeMounts:
-            - name: docker-sock
-              mountPath: /var/run/docker.sock
+            - name: podman-sock
+              mountPath: /run/podman
           volumes:
-          - name: docker-sock
+          - name: podman-sock
             emptyDir: {}
         """
     }
@@ -171,31 +159,27 @@ pipeline {
 
     stage('Build & Push Image') {
       steps {
-        container('docker-client') {
+        container('podman') {
           sh '''
-          # Wait for Docker daemon to be ready
-          echo "Waiting for Docker daemon..."
-          timeout 60 sh -c 'until docker info; do sleep 1; done'
-          
-          # Build Docker image
-          echo "Building Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
-          docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+          # Build container image using podman
+          echo "Building container image: ${IMAGE_NAME}:${IMAGE_TAG}"
+          podman build -t ${IMAGE_NAME}:${IMAGE_TAG} .
           
           # Tag image for Nexus Docker registry
-          docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-          docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
+          podman tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+          podman tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
           
           # Login to Nexus Docker registry
           echo "Logging into Nexus Docker registry..."
-          echo "${REGISTRY_CREDS_PSW}" | docker login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
+          echo "${REGISTRY_CREDS_PSW}" | podman login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
           
           # Push image to Nexus Docker registry
           echo "Pushing image to Nexus Docker registry..."
-          docker push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-          docker push ${REGISTRY_URL}/${IMAGE_NAME}:latest
+          podman push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+          podman push ${REGISTRY_URL}/${IMAGE_NAME}:latest
           
           # Logout from registry
-          docker logout ${REGISTRY_URL}
+          podman logout ${REGISTRY_URL}
           
           echo "Image built and pushed successfully:"
           echo "  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
