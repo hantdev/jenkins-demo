@@ -1,0 +1,102 @@
+pipeline {
+  agent any
+
+  environment {
+    REGISTRY_URL = credentials('nexus-registry-url')
+    REGISTRY_CREDS = credentials('nexus-docker-creds')
+    IMAGE_NAME = 'jenkins-demo-app'
+    IMAGE_TAG = "${env.BUILD_NUMBER}"
+  }
+
+  options {
+    timestamps()
+    buildDiscarder(logRotator(numToKeepStr: '5'))
+    skipDefaultCheckout()
+  }
+
+  stages {
+    stage('Debug Environment') {
+      steps {
+        script {
+          sh '''
+            echo "=== DEBUG ENVIRONMENT ==="
+            echo "Registry URL: ${REGISTRY_URL}"
+            echo "Image Name: ${IMAGE_NAME}"
+            echo "Image Tag: ${IMAGE_TAG}"
+            echo "Registry Creds USR: ${REGISTRY_CREDS_USR}"
+            echo "Registry Creds PSW: [HIDDEN]"
+            echo "========================="
+          '''
+        }
+      }
+    }
+
+    stage('Test Nexus Connectivity') {
+      steps {
+        sh '''
+          echo "Testing Nexus registry connectivity..."
+          curl -I ${REGISTRY_URL} || echo "Failed to connect to ${REGISTRY_URL}"
+          
+          echo "Testing Docker registry endpoint..."
+          curl -I ${REGISTRY_URL}/v2/ || echo "Docker registry v2 API not available"
+        '''
+      }
+    }
+
+    stage('Test Kaniko Build') {
+      steps {
+        sh '''
+          echo "Creating test Dockerfile..."
+          cat > Dockerfile << 'EOF'
+FROM alpine:latest
+RUN echo "Hello from Jenkins Kaniko test!" > /hello.txt
+CMD cat /hello.txt
+EOF
+          
+          echo "Dockerfile content:"
+          cat Dockerfile
+          
+          echo "Testing Kaniko build (no push)..."
+          docker run --rm \
+            -v $PWD:/workspace \
+            gcr.io/kaniko-project/executor:latest \
+            --context=/workspace \
+            --dockerfile=/workspace/Dockerfile \
+            --no-push \
+            --verbosity=debug
+          
+          echo "Kaniko test completed!"
+        '''
+      }
+    }
+
+    stage('Test Authentication') {
+      steps {
+        sh '''
+          echo "Testing Docker authentication..."
+          
+          # Tạo Docker config
+          mkdir -p /tmp/.docker
+          cat > /tmp/.docker/config.json << EOF
+          {
+            "auths": {
+              "${REGISTRY_URL}": {
+                "auth": "$(echo -n "${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW}" | base64)"
+              }
+            }
+          }
+          EOF
+          
+          echo "Docker config created:"
+          cat /tmp/.docker/config.json
+          
+          # Test login
+          echo "Testing Docker login..."
+          echo "${REGISTRY_CREDS_PSW}" | docker login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
+          
+          echo "Authentication test completed!"
+        '''
+      }
+    }
+  }
+}
