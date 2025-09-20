@@ -222,6 +222,7 @@ EOF
           export STORAGE_DRIVER=vfs
           export BUILDAH_ISOLATION=chroot
           export BUILDAH_REGISTRY_AUTH_FILE=/tmp/auth.json
+          export BUILDAH_REGISTRY_V1=true
           
           # Change to workspace directory
           cd /home/jenkins/agent/workspace/jenkins-demo-pipeline
@@ -267,22 +268,30 @@ location = "docker.io"
 insecure = false
 EOF
           
-          # Create registries.d configuration for v1 API
+          # Create registries.d configuration for v1 API only
           mkdir -p /etc/containers/registries.d
           cat > /etc/containers/registries.d/nexus.yaml << EOF
 docker:
   ${REGISTRY_URL}:
     tls-verify: false
     v1: true
+    v2: false
 EOF
+          
+          # Debug buildah configuration
+          echo "Buildah configuration:"
+          echo "BUILDAH_REGISTRY_V1: $BUILDAH_REGISTRY_V1"
+          echo "BUILDAH_REGISTRY_AUTH_FILE: $BUILDAH_REGISTRY_AUTH_FILE"
+          echo "Auth file contents:"
+          cat /tmp/auth.json
+          echo "Registries configuration:"
+          cat /etc/containers/registries.conf
+          echo "Registries.d configuration:"
+          cat /etc/containers/registries.d/nexus.yaml
           
           # Login with buildah using v1 API
           echo "Attempting login with buildah using v1 API..."
-          if ! buildah login --authfile /tmp/auth.json --tls-verify=false -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}/v1/; then
-            echo "v1 login failed, trying v2 API..."
-            # Try v2 API
-            buildah login --authfile /tmp/auth.json --tls-verify=false -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}
-          fi
+          buildah login --authfile /tmp/auth.json --tls-verify=false -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}
           
           echo "Pushing image..."
           # Push without docker:// scheme but with HTTP configuration
