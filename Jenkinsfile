@@ -217,9 +217,11 @@ EOF
       steps {
         container('buildah') {
           sh '''
-          # Set buildah format
+          # Set buildah format and HTTP configuration
           export BUILDAH_FORMAT=docker
           export STORAGE_DRIVER=vfs
+          export BUILDAH_ISOLATION=chroot
+          export BUILDAH_REGISTRY_AUTH_FILE=/tmp/auth.json
           
           # Change to workspace directory
           cd /home/jenkins/agent/workspace/jenkins-demo-pipeline
@@ -249,18 +251,29 @@ unqualified-search-registries = ["docker.io"]
 [[registry]]
 location = "${REGISTRY_URL}"
 insecure = true
+[[registry]]
+location = "docker.io"
+insecure = false
+EOF
+          
+          # Also create registries.d configuration
+          mkdir -p /etc/containers/registries.d
+          cat > /etc/containers/registries.d/nexus.yaml << EOF
+docker:
+  ${REGISTRY_URL}:
+    tls-verify: false
 EOF
           
           # Login with buildah
           buildah login --authfile /tmp/auth.json --tls-verify=false -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}
           
           echo "Pushing image..."
-          # Use HTTP scheme explicitly for push
-          buildah push --tls-verify=false docker://${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+          # Push without docker:// scheme but with HTTP configuration
+          buildah push --tls-verify=false ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
           
           echo "Tagging latest..."
           buildah tag ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
-          buildah push --tls-verify=false docker://${REGISTRY_URL}/${IMAGE_NAME}:latest
+          buildah push --tls-verify=false ${REGISTRY_URL}/${IMAGE_NAME}:latest
           
           echo "Logging out..."
           buildah logout ${REGISTRY_URL}
