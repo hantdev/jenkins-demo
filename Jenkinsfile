@@ -215,42 +215,43 @@ EOF
 
     stage('Build & Push Image') {
       steps {
-        container('buildah') {
-          script {
-            // Tách username/password từ credentials
-            def registryUsername = REGISTRY_CREDS_USR ?: env.REGISTRY_CREDS_USR
-            def registryPassword = REGISTRY_CREDS_PSW ?: env.REGISTRY_CREDS_PSW
-            def registry = "${REGISTRY_URL}" // Ví dụ: 10.10.2.200:30500/docker-hosted
+          container('buildah') {
+              script {
+                  withCredentials([usernamePassword(credentialsId: 'nexus-docker-creds', 
+                                                    usernameVariable: 'REGISTRY_USER', 
+                                                    passwordVariable: 'REGISTRY_PASS')]) {
+                      sh '''
+                          # Set buildah format and workspace
+                          export BUILDAH_FORMAT=docker
+                          export STORAGE_DRIVER=vfs
+                          export BUILDAH_ISOLATION=chroot
 
-            sh """
-            # Set buildah format and workspace
-            export BUILDAH_FORMAT=docker
-            export STORAGE_DRIVER=vfs
-            export BUILDAH_ISOLATION=chroot
+                          cd /home/jenkins/agent/workspace/jenkins-demo-pipeline
+                          echo "Current directory: $(pwd)"
 
-            cd /home/jenkins/agent/workspace/jenkins-demo-pipeline
-            echo "Current directory: \$(pwd)"
+                          echo "Building image..."
+                          buildah bud --format=docker -t $REGISTRY_URL/$IMAGE_NAME:$IMAGE_TAG -f Dockerfile .
 
-            echo "Building image..."
-            buildah bud --format=docker -t ${registry}/${IMAGE_NAME}:${IMAGE_TAG} -f Dockerfile .
+                          echo "Logging into registry..."
+                          # Pass password via stdin để không in ra log
+                          echo $REGISTRY_PASS | buildah login --tls-verify=false -u $REGISTRY_USER --password-stdin $REGISTRY_URL
 
-            echo "Logging into registry..."
-            buildah login --tls-verify=false -u ${registryUsername} -p ${registryPassword} ${registry}
+                          echo "Pushing image..."
+                          buildah push --tls-verify=false $REGISTRY_URL/$IMAGE_NAME:$IMAGE_TAG
 
-            echo "Pushing image..."
-            buildah push --tls-verify=false ${registry}/${IMAGE_NAME}:${IMAGE_TAG}
+                          echo "Tagging latest..."
+                          buildah tag $REGISTRY_URL/$IMAGE_NAME:$IMAGE_TAG $REGISTRY_URL/$IMAGE_NAME:latest
+                          buildah push --tls-verify=false $REGISTRY_URL/$IMAGE_NAME:latest
 
-            echo "Tagging latest..."
-            buildah tag ${registry}/${IMAGE_NAME}:${IMAGE_TAG} ${registry}/${IMAGE_NAME}:latest
-            buildah push --tls-verify=false ${registry}/${IMAGE_NAME}:latest
-
-            echo "Logging out..."
-            buildah logout ${registry}
-            """
+                          echo "Logging out..."
+                          buildah logout $REGISTRY_URL
+                      '''
+                  }
+              }
           }
-        }
       }
-    }
+  }
+
   }
 
   post {
