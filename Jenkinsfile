@@ -231,7 +231,18 @@ EOF
           buildah bud --format=docker -t ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} -f Dockerfile .
           
           echo "Logging into registry..."
-          buildah login -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}
+          # Configure buildah for insecure registry
+          export BUILDAH_REGISTRY_AUTH_FILE=/tmp/auth.json
+          
+          # Create auth file for HTTP registry
+          echo '{"auths":{"'${REGISTRY_URL}'":{"auth":"'$(echo -n ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} | base64)'"}}}' > /tmp/auth.json
+          
+          # Test connection first
+          echo "Testing connection to registry..."
+          curl -I http://${REGISTRY_URL}/v2/ || echo "Registry not accessible via HTTP"
+          
+          # Login with buildah
+          buildah login --authfile /tmp/auth.json --tls-verify=false -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}
           
           echo "Pushing image..."
           buildah push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
