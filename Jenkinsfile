@@ -241,18 +241,21 @@ EOF
           
           # Test connection first
           echo "Testing connection to registry..."
-          curl -I http://${REGISTRY_URL}/v2/ || echo "Registry not accessible via HTTP"
+          curl -I http://${REGISTRY_URL}/v2/ || echo "v2 API not accessible via HTTP"
+          curl -I http://${REGISTRY_URL}/v1/ || echo "v1 API not accessible via HTTP"
           
           # Test authentication
           echo "Testing authentication..."
-          curl -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} http://${REGISTRY_URL}/v2/ || echo "Authentication failed"
+          curl -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} http://${REGISTRY_URL}/v2/ || echo "v2 Authentication failed"
+          curl -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} http://${REGISTRY_URL}/v1/_ping || echo "v1 Authentication failed"
           
           # Check if Docker registry is properly configured
           echo "Checking Docker registry configuration..."
-          curl -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} http://${REGISTRY_URL}/v2/_catalog || echo "Cannot access catalog"
+          curl -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} http://${REGISTRY_URL}/v2/_catalog || echo "Cannot access v2 catalog"
+          curl -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} http://${REGISTRY_URL}/v1/search || echo "Cannot access v1 search"
           
-          # Configure buildah for HTTP registry
-          echo "Configuring buildah for HTTP registry..."
+          # Configure buildah for HTTP registry with v1 API
+          echo "Configuring buildah for HTTP registry with v1 API..."
           mkdir -p /etc/containers
           cat > /etc/containers/registries.conf << EOF
 unqualified-search-registries = ["docker.io"]
@@ -264,20 +267,21 @@ location = "docker.io"
 insecure = false
 EOF
           
-          # Also create registries.d configuration
+          # Create registries.d configuration for v1 API
           mkdir -p /etc/containers/registries.d
           cat > /etc/containers/registries.d/nexus.yaml << EOF
 docker:
   ${REGISTRY_URL}:
     tls-verify: false
+    v1: true
 EOF
           
-          # Login with buildah (try different approaches)
-          echo "Attempting login with buildah..."
-          if ! buildah login --authfile /tmp/auth.json --tls-verify=false -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}; then
-            echo "Login failed, trying alternative method..."
-            # Try without authfile
-            buildah login --tls-verify=false -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}
+          # Login with buildah using v1 API
+          echo "Attempting login with buildah using v1 API..."
+          if ! buildah login --authfile /tmp/auth.json --tls-verify=false -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}/v1/; then
+            echo "v1 login failed, trying v2 API..."
+            # Try v2 API
+            buildah login --authfile /tmp/auth.json --tls-verify=false -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}
           fi
           
           echo "Pushing image..."
