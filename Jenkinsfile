@@ -28,6 +28,14 @@ spec:
       name: container-storage
     - mountPath: /tmp
       name: tmp-volume
+  - name: sonar-scanner
+    image: sonarsource/sonar-scanner-cli:latest
+    command:
+    - cat
+    tty: true
+    volumeMounts:
+    - mountPath: /home/jenkins/agent
+      name: workspace-volume
   - name: jnlp
     image: jenkins/inbound-agent:latest
     volumeMounts:
