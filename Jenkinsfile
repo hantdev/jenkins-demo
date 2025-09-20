@@ -1,5 +1,48 @@
 pipeline {
-  agent any
+  agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: maven
+    image: maven:3.9.2-eclipse-temurin-17
+    command:
+    - cat
+    tty: true
+    volumeMounts:
+    - mountPath: /home/jenkins/agent
+      name: workspace-volume
+  - name: buildah
+    image: quay.io/buildah/stable:latest
+    command:
+    - cat
+    tty: true
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - mountPath: /home/jenkins/agent
+      name: workspace-volume
+    - mountPath: /var/lib/containers
+      name: container-storage
+    - mountPath: /tmp
+      name: tmp-volume
+  - name: jnlp
+    image: jenkins/inbound-agent:latest
+    volumeMounts:
+    - mountPath: /home/jenkins/agent
+      name: workspace-volume
+  volumes:
+  - name: workspace-volume
+    emptyDir: {}
+  - name: container-storage
+    emptyDir: {}
+  - name: tmp-volume
+    emptyDir: {}
+"""
+        }
+    }
 
   environment {
     REGISTRY_URL = credentials('nexus-registry-url')
@@ -163,36 +206,43 @@ pipeline {
 
     stage('Build & Push Image') {
       steps {
-        sh '''
-        # Sử dụng Docker-in-Docker với docker:dind image
-        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v $PWD:/workspace -w /workspace docker:dind sh -c "
-          echo 'Installing Docker CLI in DinD container...'
-          apk add --no-cache docker-cli
+        container('buildah') {
+          sh '''
+          # Set buildah format
+          export BUILDAH_FORMAT=docker
+          export STORAGE_DRIVER=vfs
           
-          echo 'Building container image: ${IMAGE_NAME}:${IMAGE_TAG}'
-          docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+          # Change to workspace directory
+          cd /home/jenkins/agent
           
-          echo 'Tagging image for Nexus Docker registry'
-          docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-          docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
+          echo "Current directory: $(pwd)"
+          echo "Contents: $(ls -la)"
           
-          echo 'Logging into Nexus Docker registry'
-          echo '${REGISTRY_CREDS_PSW}' | docker login ${REGISTRY_URL} -u ${REGISTRY_CREDS_USR} --password-stdin
+          echo "Building image..."
+          buildah bud --format=docker -t ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} -f Dockerfile .
           
-          echo 'Pushing image to Nexus Docker registry'
-          docker push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-          docker push ${REGISTRY_URL}/${IMAGE_NAME}:latest
+          echo "Logging into registry..."
+          buildah login -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}
           
-          echo 'Logging out from registry'
-          docker logout ${REGISTRY_URL}
+          echo "Pushing image..."
+          buildah push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
           
-          echo 'Image built and pushed successfully:'
-          echo '  - ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}'
-          echo '  - ${REGISTRY_URL}/${IMAGE_NAME}:latest'
-        "
-        '''
+          echo "Tagging latest..."
+          buildah tag ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
+          buildah push ${REGISTRY_URL}/${IMAGE_NAME}:latest
+          
+          echo "Logging out..."
+          buildah logout ${REGISTRY_URL}
+          '''
+        }
       }
     }
+  }
+
+  post {
+        always {
+            echo "Pipeline finished"
+        }
   }
 }
 
