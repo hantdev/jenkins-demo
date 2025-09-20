@@ -222,7 +222,7 @@ EOF
           export STORAGE_DRIVER=vfs
           
           # Change to workspace directory
-          cd /home/jenkins/agent
+          cd /home/jenkins/agent/workspace/jenkins-demo-pipeline
           
           echo "Current directory: $(pwd)"
           echo "Contents: $(ls -la)"
