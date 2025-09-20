@@ -216,94 +216,38 @@ EOF
     stage('Build & Push Image') {
       steps {
         container('buildah') {
-          sh '''
-          # Set buildah format and HTTP configuration
-          export BUILDAH_FORMAT=docker
-          export STORAGE_DRIVER=vfs
-          export BUILDAH_ISOLATION=chroot
-          export BUILDAH_REGISTRY_AUTH_FILE=/tmp/auth.json
-          export BUILDAH_REGISTRY_V1=true
-          
-          # Change to workspace directory
-          cd /home/jenkins/agent/workspace/jenkins-demo-pipeline
-          
-          echo "Current directory: $(pwd)"
-          echo "Contents: $(ls -la)"
-          
-          echo "Building image..."
-          buildah bud --format=docker -t ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} -f Dockerfile .
-          
-          echo "Logging into registry..."
-          # Configure buildah for insecure registry
-          export BUILDAH_REGISTRY_AUTH_FILE=/tmp/auth.json
-          
-          # Create auth file for HTTP registry
-          echo '{"auths":{"'${REGISTRY_URL}'":{"auth":"'$(echo -n ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} | base64)'"}}}' > /tmp/auth.json
-          
-          # Test connection first
-          echo "Testing connection to registry..."
-          curl -I http://${REGISTRY_URL}/v2/ || echo "v2 API not accessible via HTTP"
-          curl -I http://${REGISTRY_URL}/v1/ || echo "v1 API not accessible via HTTP"
-          
-          # Test authentication
-          echo "Testing authentication..."
-          curl -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} http://${REGISTRY_URL}/v2/ || echo "v2 Authentication failed"
-          curl -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} http://${REGISTRY_URL}/v1/_ping || echo "v1 Authentication failed"
-          
-          # Check if Docker registry is properly configured
-          echo "Checking Docker registry configuration..."
-          curl -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} http://${REGISTRY_URL}/v2/_catalog || echo "Cannot access v2 catalog"
-          curl -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} http://${REGISTRY_URL}/v1/search || echo "Cannot access v1 search"
-          
-          # Configure buildah for HTTP registry with v1 API
-          echo "Configuring buildah for HTTP registry with v1 API..."
-          mkdir -p /etc/containers
-          cat > /etc/containers/registries.conf << EOF
-unqualified-search-registries = ["docker.io"]
-[[registry]]
-location = "${REGISTRY_URL}"
-insecure = true
-[[registry]]
-location = "docker.io"
-insecure = false
-EOF
-          
-          # Create registries.d configuration for v1 API only
-          mkdir -p /etc/containers/registries.d
-          cat > /etc/containers/registries.d/nexus.yaml << EOF
-docker:
-  ${REGISTRY_URL}:
-    tls-verify: false
-    v1: true
-    v2: false
-EOF
-          
-          # Debug buildah configuration
-          echo "Buildah configuration:"
-          echo "BUILDAH_REGISTRY_V1: $BUILDAH_REGISTRY_V1"
-          echo "BUILDAH_REGISTRY_AUTH_FILE: $BUILDAH_REGISTRY_AUTH_FILE"
-          echo "Auth file contents:"
-          cat /tmp/auth.json
-          echo "Registries configuration:"
-          cat /etc/containers/registries.conf
-          echo "Registries.d configuration:"
-          cat /etc/containers/registries.d/nexus.yaml
-          
-          # Login with buildah using v1 API
-          echo "Attempting login with buildah using v1 API..."
-          buildah login --authfile /tmp/auth.json --tls-verify=false -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}
-          
-          echo "Pushing image..."
-          # Push without docker:// scheme but with HTTP configuration
-          buildah push --tls-verify=false ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-          
-          echo "Tagging latest..."
-          buildah tag ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
-          buildah push --tls-verify=false ${REGISTRY_URL}/${IMAGE_NAME}:latest
-          
-          echo "Logging out..."
-          buildah logout ${REGISTRY_URL}
-          '''
+          script {
+            // Tách username/password từ credentials
+            def registryUsername = REGISTRY_CREDS_USR ?: env.REGISTRY_CREDS_USR
+            def registryPassword = REGISTRY_CREDS_PSW ?: env.REGISTRY_CREDS_PSW
+            def registry = "${REGISTRY_URL}" // Ví dụ: 10.10.2.200:30500/docker-hosted
+
+            sh """
+            # Set buildah format and workspace
+            export BUILDAH_FORMAT=docker
+            export STORAGE_DRIVER=vfs
+            export BUILDAH_ISOLATION=chroot
+
+            cd /home/jenkins/agent/workspace/jenkins-demo-pipeline
+            echo "Current directory: \$(pwd)"
+
+            echo "Building image..."
+            buildah bud --format=docker -t ${registry}/${IMAGE_NAME}:${IMAGE_TAG} -f Dockerfile .
+
+            echo "Logging into registry..."
+            buildah login --tls-verify=false -u ${registryUsername} -p ${registryPassword} ${registry}
+
+            echo "Pushing image..."
+            buildah push --tls-verify=false ${registry}/${IMAGE_NAME}:${IMAGE_TAG}
+
+            echo "Tagging latest..."
+            buildah tag ${registry}/${IMAGE_NAME}:${IMAGE_TAG} ${registry}/${IMAGE_NAME}:latest
+            buildah push --tls-verify=false ${registry}/${IMAGE_NAME}:latest
+
+            echo "Logging out..."
+            buildah logout ${registry}
+            """
+          }
         }
       }
     }
