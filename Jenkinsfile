@@ -243,6 +243,14 @@ EOF
           echo "Testing connection to registry..."
           curl -I http://${REGISTRY_URL}/v2/ || echo "Registry not accessible via HTTP"
           
+          # Test authentication
+          echo "Testing authentication..."
+          curl -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} http://${REGISTRY_URL}/v2/ || echo "Authentication failed"
+          
+          # Check if Docker registry is properly configured
+          echo "Checking Docker registry configuration..."
+          curl -u ${REGISTRY_CREDS_USR}:${REGISTRY_CREDS_PSW} http://${REGISTRY_URL}/v2/_catalog || echo "Cannot access catalog"
+          
           # Configure buildah for HTTP registry
           echo "Configuring buildah for HTTP registry..."
           mkdir -p /etc/containers
@@ -264,8 +272,13 @@ docker:
     tls-verify: false
 EOF
           
-          # Login with buildah
-          buildah login --authfile /tmp/auth.json --tls-verify=false -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}
+          # Login with buildah (try different approaches)
+          echo "Attempting login with buildah..."
+          if ! buildah login --authfile /tmp/auth.json --tls-verify=false -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}; then
+            echo "Login failed, trying alternative method..."
+            # Try without authfile
+            buildah login --tls-verify=false -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}
+          fi
           
           echo "Pushing image..."
           # Push without docker:// scheme but with HTTP configuration
