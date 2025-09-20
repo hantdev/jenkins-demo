@@ -161,46 +161,47 @@ spec:
         SONAR_SCANNER_OPTS = '-Xmx512m'
       }
       steps {
-        sh '''
-        if ! command -v sonar-scanner >/dev/null 2>&1; then
-          SCANNER_VERSION=5.0.1.3006
-          SCANNER_URL="https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux.zip"
+        container('sonar-scanner') {
+          sh '''
+          # Change to workspace directory
+          cd /home/jenkins/agent/workspace/jenkins-demo-pipeline
           
-          # Download with retry and verification
-          for i in {1..3}; do
-            echo "Download attempt $i..."
-            if curl -fsSLo scanner.zip "$SCANNER_URL"; then
-              echo "Download successful"
-              break
-            else
-              echo "Download failed, retrying..."
-              rm -f scanner.zip
-              sleep 2
-            fi
-          done
+          echo "Current directory: $(pwd)"
+          echo "Contents: $(ls -la)"
           
-          # Verify download size (should be > 1MB)
-          if [ ! -f scanner.zip ] || [ $(stat -c%s scanner.zip) -lt 1000000 ]; then
-            echo "ERROR: Scanner download failed or file too small"
-            exit 1
+          # Check if sonar-project.properties exists
+          if [ -f sonar-project.properties ]; then
+            echo "Found sonar-project.properties:"
+            cat sonar-project.properties
+          else
+            echo "sonar-project.properties not found, creating one..."
+            cat > sonar-project.properties << EOF
+sonar.projectKey=jenkins-demo-app
+sonar.projectName=jenkins-demo-app
+sonar.projectVersion=1.0
+sonar.sources=src
+sonar.tests=test
+sonar.language=js
+sonar.sourceEncoding=UTF-8
+sonar.javascript.lcov.reportPaths=coverage/lcov.info
+EOF
           fi
           
-          # Extract with force overwrite
-          unzip -o scanner.zip
-          export PATH="$PWD/sonar-scanner-${SCANNER_VERSION}-linux/bin:$PATH"
-          
-          # Verify installation
-          if ! sonar-scanner --version; then
-            echo "ERROR: SonarQube Scanner installation failed"
-            exit 1
+          # Check if test directory exists, if not remove from config
+          if [ ! -d test ]; then
+            echo "Test directory not found, updating sonar-project.properties..."
+            sed -i '/sonar.tests/d' sonar-project.properties
+            echo "Updated sonar-project.properties:"
+            cat sonar-project.properties
           fi
-        fi
-        
-        sonar-scanner \
-          -Dsonar.host.url=http://10.10.2.200:30090 \
-          -Dsonar.login=${SONAR_TOKEN} \
-          -Dproject.settings=sonar-project.properties
-        '''
+          
+          # Run sonar-scanner
+          sonar-scanner \
+            -Dsonar.host.url=http://10.10.2.200:30090 \
+            -Dsonar.token=${SONAR_TOKEN} \
+            -Dproject.settings=sonar-project.properties
+          '''
+        }
       }
     }
 
