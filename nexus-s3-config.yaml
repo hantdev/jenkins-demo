@@ -1,0 +1,83 @@
+# Nexus với S3 Backend (MinIO)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nexus-s3-secret
+  namespace: nexus
+type: Opaque
+data:
+  access-key: bmV4dXMtdXNlcg==  # nexus-user
+  secret-key: bmV4dXMtcGFzc3dvcmQxMjM=  # nexus-password123
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexus
+  namespace: nexus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nexus
+  template:
+    metadata:
+      labels:
+        app: nexus
+    spec:
+      containers:
+      - name: nexus
+        image: sonatype/nexus3:latest
+        ports:
+        - containerPort: 8081
+        - containerPort: 5000
+        env:
+        - name: NEXUS_SECURITY_RANDOMPASSWORD
+          value: "false"
+        - name: INSTALL4J_ADD_VM_PARAMS
+          value: "-Xms1g -Xmx2g -XX:MaxDirectMemorySize=3g"
+        volumeMounts:
+        - name: nexus-data
+          mountPath: /nexus-data
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+      volumes:
+      - name: nexus-data
+        persistentVolumeClaim:
+          claimName: nexus-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexus
+  namespace: nexus
+spec:
+  selector:
+    app: nexus
+  ports:
+  - name: nexus-ui
+    port: 8081
+    targetPort: 8081
+  - name: nexus-docker
+    port: 5000
+    targetPort: 5000
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nexus-pvc
+  namespace: nexus
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

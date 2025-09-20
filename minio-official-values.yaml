@@ -1,0 +1,32 @@
+# Official MinIO Helm Chart Values - Single Node Mode
+auth:
+  rootUser: "minioadmin"
+  rootPassword: "minioadmin123"
+
+# Cấu hình single node mode
+mode: standalone
+
+# Cấu hình service
+service:
+  type: NodePort
+  nodePorts:
+    api: 30502
+    console: 30503
+
+# Cấu hình persistence
+persistence:
+  enabled: true
+  size: 20Gi
+
+# Cấu hình resources
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# Cấu hình environment variables
+env:
+  MINIO_DEFAULT_BUCKETS: "nexus-docker"

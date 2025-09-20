@@ -1,0 +1,45 @@
+# Bitnami MinIO Helm Chart Values
+auth:
+  rootUser: "minioadmin"
+  rootPassword: "minioadmin123"
+
+# Cho phép sử dụng image không chính thức
+global:
+  security:
+    allowInsecureImages: true
+
+minio:
+  env:
+    MINIO_DEFAULT_BUCKETS: "nexus-docker"
+  persistence:
+    enabled: true
+    size: 20Gi
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+console:
+  enabled: true
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+
+service:
+  type: NodePort
+  ports:
+    api: 9000
+    console: 9001
+  nodePorts:
+    api: 30502
+    console: 30503
+
+ingress:
+  enabled: false
