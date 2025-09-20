@@ -241,15 +241,26 @@ EOF
           echo "Testing connection to registry..."
           curl -I http://${REGISTRY_URL}/v2/ || echo "Registry not accessible via HTTP"
           
+          # Configure buildah for HTTP registry
+          echo "Configuring buildah for HTTP registry..."
+          mkdir -p /etc/containers
+          cat > /etc/containers/registries.conf << EOF
+unqualified-search-registries = ["docker.io"]
+[[registry]]
+location = "${REGISTRY_URL}"
+insecure = true
+EOF
+          
           # Login with buildah
           buildah login --authfile /tmp/auth.json --tls-verify=false -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} ${REGISTRY_URL}
           
           echo "Pushing image..."
-          buildah push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+          # Use HTTP scheme explicitly for push
+          buildah push --tls-verify=false docker://${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
           
           echo "Tagging latest..."
           buildah tag ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:latest
-          buildah push ${REGISTRY_URL}/${IMAGE_NAME}:latest
+          buildah push --tls-verify=false docker://${REGISTRY_URL}/${IMAGE_NAME}:latest
           
           echo "Logging out..."
           buildah logout ${REGISTRY_URL}
